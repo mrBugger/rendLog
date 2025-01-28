@@ -44,6 +44,9 @@
             const rendInfoDiv = document.getElementById('rendInfo');
             rendInfoDiv.innerHTML = ''; // Clear previous results
 
+            let activeCooldowns = 0; // Track the number of layers on cooldown
+            const combinedEntries = {}; // Track entries by timestamp
+
             lines.forEach(line => {
                 if (line.trim() === '') return;
 
@@ -58,25 +61,53 @@
                     const cooldown = cooldownMatch ? parseCooldown(cooldownMatch[1]) : 3 * 3600; // Default cooldown is 3 hours
                     const cooldownEnd = new Date(rendDateTime.getTime() + cooldown * 1000);
 
-                    const infoDiv = document.createElement('div');
-                    infoDiv.innerHTML = `Rend popped today ${rendTime} `;
-
-                    if (cooldownEnd > new Date()) {
-                        const cooldownSpan = document.createElement('span');
-                        cooldownSpan.className = 'cooldown';
-                        cooldownSpan.dataset.cooldownEnd = cooldownEnd.toISOString();
-                        cooldownSpan.innerText = `(cooldown ${formatTime(cooldownEnd - new Date())})`;
-                        infoDiv.appendChild(cooldownSpan);
+                    // Combine entries with the same timestamp
+                    if (!combinedEntries[rendTime]) {
+                        combinedEntries[rendTime] = {
+                            rendDateTime,
+                            cooldownEnd,
+                            onCooldown: cooldownEnd > new Date(),
+                        };
                     } else {
-                        const freeLayerSpan = document.createElement('span');
-                        freeLayerSpan.className = 'free-layer';
-                        freeLayerSpan.innerText = 'free layer';
-                        infoDiv.appendChild(freeLayerSpan);
+                        // If multiple entries have the same timestamp, keep the one with the longest cooldown
+                        if (cooldownEnd > combinedEntries[rendTime].cooldownEnd) {
+                            combinedEntries[rendTime].cooldownEnd = cooldownEnd;
+                            combinedEntries[rendTime].onCooldown = cooldownEnd > new Date();
+                        }
                     }
-
-                    rendInfoDiv.appendChild(infoDiv);
                 }
             });
+
+            // Process combined entries
+            Object.keys(combinedEntries).forEach(rendTime => {
+                const { cooldownEnd, onCooldown } = combinedEntries[rendTime];
+                const infoDiv = document.createElement('div');
+                infoDiv.innerHTML = `Rend popped today ${rendTime} `;
+
+                if (onCooldown) {
+                    activeCooldowns++; // Increment the number of active cooldowns
+                    const cooldownSpan = document.createElement('span');
+                    cooldownSpan.className = 'cooldown';
+                    cooldownSpan.dataset.cooldownEnd = cooldownEnd.toISOString();
+                    cooldownSpan.innerText = `(cooldown ${formatTime(cooldownEnd - new Date())})`;
+                    infoDiv.appendChild(cooldownSpan);
+                } else if (3 - activeCooldowns > 0) {
+                    // Only show "free layer" if there is at least one free layer
+                    const freeLayerSpan = document.createElement('span');
+                    freeLayerSpan.className = 'free-layer';
+                    freeLayerSpan.innerText = 'free layer';
+                    infoDiv.appendChild(freeLayerSpan);
+                }
+
+                rendInfoDiv.appendChild(infoDiv);
+            });
+
+            // Display the number of free layers
+            const freeLayers = 3 - activeCooldowns; // Calculate free layers
+            const freeLayersDiv = document.createElement('div');
+            freeLayersDiv.className = 'free-layer';
+            freeLayersDiv.innerText = `Free layers: ${freeLayers}`;
+            rendInfoDiv.appendChild(freeLayersDiv);
 
             // Update cooldowns every second
             setInterval(updateCooldowns, 1000);
@@ -117,16 +148,26 @@
 
         function updateCooldowns() {
             const cooldownSpans = document.querySelectorAll('.cooldown');
+            let activeCooldowns = 0;
+
             cooldownSpans.forEach(span => {
                 const cooldownEnd = new Date(span.dataset.cooldownEnd);
                 const remaining = cooldownEnd - new Date();
                 if (remaining > 0) {
+                    activeCooldowns++; // Count active cooldowns
                     span.innerText = `(cooldown ${formatTime(remaining)})`;
                 } else {
                     span.className = 'free-layer';
                     span.innerText = 'free layer';
                 }
             });
+
+            // Update the number of free layers
+            const freeLayers = 3 - activeCooldowns;
+            const freeLayersDiv = document.querySelector('.free-layer:last-child');
+            if (freeLayersDiv) {
+                freeLayersDiv.innerText = `Free layers: ${freeLayers}`;
+            }
         }
     </script>
 </body>
