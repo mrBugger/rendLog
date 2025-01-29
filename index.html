@@ -5,37 +5,118 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rend Log</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
+        /* Modern color palette */
+        :root {
+            --primary-color: #4a90e2; /* Blue */
+            --secondary-color: #50e3c2; /* Teal */
+            --background-color: #f5f7fa; /* Light gray */
+            --text-color: #333; /* Dark gray */
+            --card-background: #ffffff; /* White */
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: var(--card-background);
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            padding: 20px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 2rem;
+        }
+
         textarea {
             width: 100%;
             height: 150px;
-            margin-bottom: 10px;
+            padding: 10px;
+            border: 2px solid var(--primary-color);
+            border-radius: 5px;
+            font-size: 1rem;
+            margin-bottom: 20px;
+            resize: vertical;
+            transition: border-color 0.3s ease;
         }
+
+        textarea:focus {
+            border-color: var(--secondary-color);
+            outline: none;
+        }
+
         button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
             padding: 10px 20px;
-            font-size: 16px;
+            font-size: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
         }
+
+        button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .free-layer {
+            color: var(--secondary-color);
+            font-weight: bold;
+            margin-left: 10px;
+            font-size: 1.1rem;
+        }
+
         .rend-info {
             margin-top: 20px;
         }
-        .cooldown {
-            color: red;
+
+        .rend-info div {
+            background-color: var(--background-color);
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            box-shadow: var(--shadow);
+            font-size: 1rem;
         }
-        .free-layer {
-            color: green;
+
+        .cooldown {
+            color: #e74c3c; /* Red */
+            font-weight: bold;
+        }
+
+        .free-layer-text {
+            color: var(--secondary-color);
             font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <h1>Rend Log</h1>
-    <textarea id="rendInput" placeholder="Paste your Rend log here..."></textarea>
-    <button onclick="calculateCooldowns()">Calculate</button>
+    <div class="container">
+        <h1>Rend Log</h1>
+        <textarea id="rendInput" placeholder="Paste your Rend log here..."></textarea>
+        <div>
+            <button onclick="calculateCooldowns()">Calculate</button>
+            <span id="freeLayersDisplay" class="free-layer"></span>
+        </div>
 
-    <div id="rendInfo" class="rend-info"></div>
+        <div id="rendInfo" class="rend-info"></div>
+    </div>
 
     <script>
         function calculateCooldowns() {
@@ -51,13 +132,14 @@
                 if (line.trim() === '') return;
 
                 // Extract time and cooldown information
-                const timeMatch = line.match(/Today (\d{1,2}:\d{2}(?:am|pm))/);
+                const timeMatch = line.match(/(Yesterday|Today) (\d{1,2}:\d{2}(?:am|pm))/);
                 const droppedMatch = line.match(/Dropped (\d+ hours? \d+ minutes? \d+ seconds? ago)/);
                 const cooldownMatch = line.match(/Cooldown (\d+h \d+m \d+s)/);
 
                 if (timeMatch) {
-                    const rendTime = timeMatch[1];
-                    const rendDateTime = parseTime(rendTime); // Convert to Date object
+                    const datePrefix = timeMatch[1]; // "Yesterday" or "Today"
+                    const rendTime = timeMatch[2];
+                    const rendDateTime = parseTime(datePrefix, rendTime); // Convert to Date object
                     const cooldown = cooldownMatch ? parseCooldown(cooldownMatch[1]) : 3 * 3600; // Default cooldown is 3 hours
                     const cooldownEnd = new Date(rendDateTime.getTime() + cooldown * 1000);
 
@@ -82,7 +164,7 @@
             Object.keys(combinedEntries).forEach(rendTime => {
                 const { cooldownEnd, onCooldown } = combinedEntries[rendTime];
                 const infoDiv = document.createElement('div');
-                infoDiv.innerHTML = `Rend popped today ${rendTime} `;
+                infoDiv.innerHTML = `Rend popped at ${rendTime} `;
 
                 if (onCooldown) {
                     activeCooldowns++; // Increment the number of active cooldowns
@@ -91,29 +173,21 @@
                     cooldownSpan.dataset.cooldownEnd = cooldownEnd.toISOString();
                     cooldownSpan.innerText = `(cooldown ${formatTime(cooldownEnd - new Date())})`;
                     infoDiv.appendChild(cooldownSpan);
-                } else if (3 - activeCooldowns > 0) {
-                    // Only show "free layer" if there is at least one free layer
-                    const freeLayerSpan = document.createElement('span');
-                    freeLayerSpan.className = 'free-layer';
-                    freeLayerSpan.innerText = 'free layer';
-                    infoDiv.appendChild(freeLayerSpan);
                 }
 
                 rendInfoDiv.appendChild(infoDiv);
             });
 
-            // Display the number of free layers
-            const freeLayers = 3 - activeCooldowns; // Calculate free layers
-            const freeLayersDiv = document.createElement('div');
-            freeLayersDiv.className = 'free-layer';
-            freeLayersDiv.innerText = `Free layers: ${freeLayers}`;
-            rendInfoDiv.appendChild(freeLayersDiv);
+            // Calculate free layers (fixed to 3 total layers)
+            const freeLayers = Math.max(0, 3 - activeCooldowns); // Ensure free layers is not negative
+            const freeLayersDisplay = document.getElementById('freeLayersDisplay');
+            freeLayersDisplay.innerText = `Free layers: ${freeLayers}`;
 
             // Update cooldowns every second
             setInterval(updateCooldowns, 1000);
         }
 
-        function parseTime(timeStr) {
+        function parseTime(datePrefix, timeStr) {
             const [time, modifier] = timeStr.split(/(am|pm)/);
             let [hours, minutes] = time.split(':');
             hours = parseInt(hours);
@@ -123,6 +197,9 @@
             if (modifier === 'am' && hours === 12) hours = 0;
 
             const date = new Date();
+            if (datePrefix === "Yesterday") {
+                date.setDate(date.getDate() - 1); // Adjust for "Yesterday"
+            }
             date.setHours(hours, minutes, 0, 0);
             return date;
         }
@@ -157,17 +234,14 @@
                     activeCooldowns++; // Count active cooldowns
                     span.innerText = `(cooldown ${formatTime(remaining)})`;
                 } else {
-                    span.className = 'free-layer';
-                    span.innerText = 'free layer';
+                    span.remove(); // Remove the cooldown span if the cooldown has ended
                 }
             });
 
-            // Update the number of free layers
-            const freeLayers = 3 - activeCooldowns;
-            const freeLayersDiv = document.querySelector('.free-layer:last-child');
-            if (freeLayersDiv) {
-                freeLayersDiv.innerText = `Free layers: ${freeLayers}`;
-            }
+            // Update the number of free layers (fixed to 3 total layers)
+            const freeLayers = Math.max(0, 3 - activeCooldowns); // Ensure free layers is not negative
+            const freeLayersDisplay = document.getElementById('freeLayersDisplay');
+            freeLayersDisplay.innerText = `Free layers: ${freeLayers}`;
         }
     </script>
 </body>
