@@ -39,13 +39,26 @@
         }
 
         .container {
+            display: flex;
+            gap: 20px;
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        .left-panel, .right-panel {
             background-color: var(--card-background);
             border-radius: 10px;
             box-shadow: var(--shadow);
             padding: 20px;
-            max-width: 600px;
-            width: 100%;
             transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .left-panel {
+            flex: 2;
+        }
+
+        .right-panel {
+            flex: 1;
         }
 
         h1 {
@@ -98,11 +111,11 @@
             transition: color 0.3s ease;
         }
 
-        .rend-info {
+        .rend-info, .free-layers-info {
             margin-top: 20px;
         }
 
-        .rend-info div {
+        .rend-info div, .free-layers-info div {
             background-color: var(--background-color);
             padding: 10px;
             border-radius: 5px;
@@ -138,14 +151,21 @@
 <body>
     <button class="theme-toggle" onclick="toggleTheme()">Dark Mode</button>
     <div class="container">
-        <h1>Rend Log</h1>
-        <textarea id="rendInput" placeholder="Paste your Rend log here..."></textarea>
-        <div>
-            <button onclick="calculateCooldowns()">Calculate</button>
-            <span id="freeLayersDisplay" class="free-layer"></span>
+        <div class="left-panel">
+            <h1>Rend Log</h1>
+            <textarea id="rendInput" placeholder="Paste your Rend log here..."></textarea>
+            <div>
+                <button onclick="calculateCooldowns()">Calculate</button>
+                <span id="freeLayersDisplay" class="free-layer"></span>
+            </div>
+
+            <div id="rendInfo" class="rend-info"></div>
         </div>
 
-        <div id="rendInfo" class="rend-info"></div>
+        <div class="right-panel">
+            <h2>Free Layers</h2>
+            <div id="freeLayersInfo" class="free-layers-info"></div>
+        </div>
     </div>
 
     <script>
@@ -168,16 +188,21 @@
             const input = document.getElementById('rendInput').value;
             const lines = input.split('\n');
             const rendInfoDiv = document.getElementById('rendInfo');
+            const freeLayersInfoDiv = document.getElementById('freeLayersInfo');
             rendInfoDiv.innerHTML = ''; // Clear previous results
+            freeLayersInfoDiv.innerHTML = ''; // Clear previous free layers info
 
             let activeCooldowns = 0; // Track the number of layers on cooldown
             const combinedEntries = {}; // Track entries by timestamp
+            const layersOnCooldown = new Set(); // Track which layers are on cooldown
+            const layerZoneMap = {}; // Map layer to zone
 
             lines.forEach(line => {
                 if (line.trim() === '') return;
 
-                // Extract time and cooldown information
+                // Extract time, layer/zone, and cooldown information
                 const timeMatch = line.match(/(Yesterday|Today) (\d{1,2}:\d{2}(?:am|pm))/);
+                const layerMatch = line.match(/\[(Layer \d+)\] \(zone (\d+)\)/);
                 const droppedMatch = line.match(/Dropped (\d+ hours? \d+ minutes? \d+ seconds? ago)/);
                 const cooldownMatch = line.match(/Cooldown (\d+h \d+m \d+s)/);
 
@@ -188,12 +213,24 @@
                     const cooldown = cooldownMatch ? parseCooldown(cooldownMatch[1]) : 3 * 3600; // Default cooldown is 3 hours
                     const cooldownEnd = new Date(rendDateTime.getTime() + cooldown * 1000);
 
+                    // Get layer and zone information or default to "unknown layer"
+                    const layerInfo = layerMatch ? `[${layerMatch[1]}] (zone ${layerMatch[2]})` : 'unknown layer';
+
+                    // Track layers on cooldown and their zones
+                    if (layerMatch) {
+                        if (cooldownEnd > new Date()) {
+                            layersOnCooldown.add(layerMatch[1]); // Only add to cooldown if still active
+                        }
+                        layerZoneMap[layerMatch[1]] = layerMatch[2]; // Map layer to zone
+                    }
+
                     // Combine entries with the same timestamp
                     if (!combinedEntries[rendTime]) {
                         combinedEntries[rendTime] = {
                             rendDateTime,
                             cooldownEnd,
                             onCooldown: cooldownEnd > new Date(),
+                            layerInfo,
                         };
                     } else {
                         // If multiple entries have the same timestamp, keep the one with the longest cooldown
@@ -201,15 +238,19 @@
                             combinedEntries[rendTime].cooldownEnd = cooldownEnd;
                             combinedEntries[rendTime].onCooldown = cooldownEnd > new Date();
                         }
+                        // Preserve layer info if it exists in any of the combined entries
+                        if (layerInfo !== 'unknown layer') {
+                            combinedEntries[rendTime].layerInfo = layerInfo;
+                        }
                     }
                 }
             });
 
             // Process combined entries
             Object.keys(combinedEntries).forEach(rendTime => {
-                const { cooldownEnd, onCooldown } = combinedEntries[rendTime];
+                const { cooldownEnd, onCooldown, layerInfo } = combinedEntries[rendTime];
                 const infoDiv = document.createElement('div');
-                infoDiv.innerHTML = `Rend popped at ${rendTime} `;
+                infoDiv.innerHTML = `Rend popped at ${rendTime} ${layerInfo} `;
 
                 if (onCooldown) {
                     activeCooldowns++; // Increment the number of active cooldowns
@@ -227,6 +268,16 @@
             const freeLayers = Math.max(0, 3 - activeCooldowns); // Ensure free layers is not negative
             const freeLayersDisplay = document.getElementById('freeLayersDisplay');
             freeLayersDisplay.innerText = `Free layers: ${freeLayers}`;
+
+            // Display free layers in the right panel
+            const allLayers = new Set(['Layer 1', 'Layer 2', 'Layer 3']);
+            layersOnCooldown.forEach(layer => allLayers.delete(layer)); // Remove layers on cooldown
+            allLayers.forEach(layer => {
+                const freeLayerDiv = document.createElement('div');
+                const zone = layerZoneMap[layer] || 'unknown'; // Get zone from the map
+                freeLayerDiv.innerHTML = `[${layer}] (zone ${zone}) is free for Rend`;
+                freeLayersInfoDiv.appendChild(freeLayerDiv);
+            });
 
             // Update cooldowns every second
             setInterval(updateCooldowns, 1000);
